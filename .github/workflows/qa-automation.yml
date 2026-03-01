@@ -1,0 +1,44 @@
+name: DataDash QA - Automated Table Sum (23f2001831@ds.study.iitm.ac.in)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  scrape-and-verify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        working-directory: ./ga3/q13
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Playwright browsers
+        working-directory: ./ga3/q13
+        run: playwright install chromium
+      
+      - name: Run QA - Student 23f2001831@ds.study.iitm.ac.in Table Validation
+        working-directory: ./ga3/q13
+        run: python scrape_tables.py
+      
+      - name: Report Results
+        if: always()
+        run: |
+          echo "✅ QA Automation Complete"
+          echo "Student: 23f2001831@ds.study.iitm.ac.in"
+          echo "Tested seeds: 71-80"
