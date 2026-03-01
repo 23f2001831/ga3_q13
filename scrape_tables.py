@@ -13,7 +13,7 @@ SEEDS = list(range(71, 81))  # 71 to 80
 
 # ⚠️ IMPORTANT: Update this with the actual base URL for your seeds
 # Example: "https://example.com/generate?seed={seed}"
-BASE_URL = "https://example.com/seed/{seed}"
+BASE_URL = "https://sanand0.github.io/tdsdata/js_table/?seed={seed}"
 
 # Validate URL is set
 if "example.com" in BASE_URL:
@@ -23,7 +23,7 @@ if "example.com" in BASE_URL:
 
 async def scrape_table_numbers(page, url: str, seed: int) -> list:
     """
-    Scrape all numbers from tables on the page
+    Scrape all numbers from tables on the page using JavaScript evaluation
     Returns list of numeric values found
     """
     try:
@@ -32,28 +32,43 @@ async def scrape_table_numbers(page, url: str, seed: int) -> list:
         
         # Wait for table to load
         print(f"  → Waiting for table element...")
-        await page.wait_for_selector("table", timeout=10000)
+        try:
+            await page.wait_for_selector("table", timeout=10000)
+        except:
+            print(f"  ⚠ No table found, continuing anyway...")
         
-        # Extract all text from tables
-        print(f"  → Extracting table content...")
-        table_content = await page.locator("table").all_text_contents()
+        # Small wait to ensure JS is executed
+        await page.wait_for_timeout(2000)
         
-        # Find all numbers (integers and decimals)
-        numbers = []
-        for content in table_content:
-            # Match integers and decimals
-            matches = re.findall(r'-?\d+(?:\.\d+)?', content)
-            for match in matches:
-                try:
-                    if '.' in match:
-                        numbers.append(float(match))
-                    else:
-                        numbers.append(int(match))
-                except ValueError:
-                    pass
+        # Use JavaScript to extract and sum all numbers from tables
+        print(f"  → Extracting numbers from tables...")
+        total_on_page = await page.evaluate(r'''() => {
+            let total = 0;
+            const numbers = [];
+            const tables = document.querySelectorAll('table');
+            for (const table of tables) {
+                const cells = table.querySelectorAll('td, th');
+                for (const cell of cells) {
+                    const text = cell.innerText.trim();
+                    if (text) {
+                        const val = parseFloat(text);
+                        if (!isNaN(val) && /^-?[0-9]+(?:\.[0-9]+)?$/.test(text)) {
+                            total += val;
+                            numbers.push(val);
+                        }
+                    }
+                }
+            }
+            return {total: total, count: numbers.length};
+        }''')
         
-        print(f"  ✓ Found {len(numbers)} numbers on seed {seed}")
-        return numbers
+        count = total_on_page['count']
+        total = total_on_page['total']
+        print(f"  ✓ Found {count} numbers, sum on this page: {total}")
+        
+        # Return as list for compatibility
+        return [total] if total != 0 else []
+        
     except Exception as e:
         print(f"  ✗ ERROR scraping seed {seed}: {type(e).__name__}: {e}")
         return []
@@ -62,7 +77,7 @@ async def scrape_all_seeds():
     """
     Scrape all seeds and return total sum
     """
-    all_numbers = []
+    page_totals = []
     
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -77,13 +92,13 @@ async def scrape_all_seeds():
             print(f"\nScraping seed {seed}:")
             
             numbers = await scrape_table_numbers(page, url, seed)
-            all_numbers.extend(numbers)
+            page_totals.extend(numbers)
         
         await browser.close()
     
     # Calculate total
-    total = sum(all_numbers)
-    return total, all_numbers
+    total = sum(page_totals)
+    return total, page_totals
 
 async def main():
     """Main entry point"""
